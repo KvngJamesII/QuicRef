@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QuicReF - Create Task</title>
+
+  <!-- Firebase (v8) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+  <style>
+    /* Global resets & defaults */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #f9f9f9;
+      color: #333;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding: 0 0 40px 0; 
+    }
+
+    /* Container */
+    .container {
+      max-width: 600px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    /* Header */
+    h2 {
+      text-align: center;
+      font-size: 24px;
+      color: #2EBEC6;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+
+    /* Input fields */
+    .input-field {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 14px;
+      background: #fff;
+      color: #333;
+    }
+
+    /* Submit Button */
+    .btn {
+      display: inline-block;
+      width: 100%;
+      padding: 14px;
+      background: #2EBEC6;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.2s;
+    }
+    .btn:hover {
+      background: #28a8ad;
+    }
+
+    /* Loading Overlay & Spinner */
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      top: 0; 
+      left: 0;
+      width: 100%; 
+      height: 100%;
+      background: rgba(0,0,0,0.6);
+      z-index: 9999;
+      text-align: center;
+      align-items: center;
+      justify-content: center;
+    }
+    .loading-overlay.active {
+      display: flex;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 6px solid #ccc;
+      border-top: 6px solid #2EBEC6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: auto;
+    }
+    @keyframes spin {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div>
+      <div class="spinner"></div>
+      <p style="margin-top: 10px; color: #fff;">Loading QuicReF...</p>
+    </div>
+  </div>
+
+  <div class="container">
+    <h2>Create Task</h2>
+
+    <input type="text" id="taskName" class="input-field" placeholder="Task Name" />
+    <textarea id="taskDescription" class="input-field" placeholder="Task Description" rows="4"></textarea>
+    <input type="url" id="taskLink" class="input-field" placeholder="Task Link (URL)" />
+    <input type="number" id="totalSlots" class="input-field" placeholder="How many users needed" />
+    <input type="number" id="price" class="input-field" placeholder="Price per user (₦)" />
+    <button class="btn" onclick="createTask()">Submit Task</button>
+  </div>
+
+  <script>
+    // ========== Firebase Config ==========
+    const firebaseConfig = {
+      apiKey: "AIzaSyAvbwXNN1yRBSiyDOG9Jru9jodPEgmJfrs",
+      authDomain: "quicref-68806.firebaseapp.com",
+      databaseURL: "https://quicref-68806-default-rtdb.firebaseio.com",
+      projectId: "quicref-68806",
+      storageBucket: "quicref-68806.firebasestorage.app",
+      messagingSenderId: "196781817009",
+      appId: "1:196781817009:web:013596f70ac472d5d13690",
+      measurementId: "G-5VCLEVJ3S9"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    // Show / Hide Loading
+    function showLoading() {
+      document.getElementById("loadingOverlay").classList.add("active");
+    }
+    function hideLoading() {
+      document.getElementById("loadingOverlay").classList.remove("active");
+    }
+
+    // Check Auth on Page Load
+    auth.onAuthStateChanged(user => {
+      if (!user) {
+        window.location.href = "login.html";
+      }
+    });
+
+    // Create Task
+    function createTask() {
+      const taskName = document.getElementById('taskName').value.trim();
+      const taskDescription = document.getElementById('taskDescription').value.trim();
+      const taskLink = document.getElementById('taskLink').value.trim();
+      const totalSlots = parseInt(document.getElementById('totalSlots').value, 10);
+      const price = parseFloat(document.getElementById('price').value);
+
+      // Basic validation
+      if (!taskName || !taskDescription || !taskLink || !totalSlots || !price) {
+        alert("Please fill all fields");
+        return;
+      }
+
+      // Validate URL
+      try {
+        new URL(taskLink);
+      } catch (e) {
+        alert("Invalid URL");
+        return;
+      }
+
+      // Enforce a minimum price of 50 Naira
+      if (price < 50) {
+        alert("The minimum price per user is ₦50.");
+        return;
+      }
+
+      showLoading(); // Start loading overlay
+
+      auth.onAuthStateChanged(user => {
+        if (user) {
+          database.ref('users/' + user.uid).once('value').then(snapshot => {
+            let userData = snapshot.val() || {};
+            let totalCost = totalSlots * price;
+
+            if ((userData.depositBalance || 0) < totalCost) {
+              alert("Insufficient Funds, Please Fund Your Wallet");
+              hideLoading();
+            } else {
+              // Deduct cost and create task
+              let newBalance = userData.depositBalance - totalCost;
+              database.ref('users/' + user.uid).update({ depositBalance: newBalance })
+              .then(() => {
+                const taskData = {
+                  name: taskName,
+                  description: taskDescription,
+                  link: taskLink,
+                  totalSlots: totalSlots,
+                  slotsLeft: totalSlots,
+                  price: price,
+                  ownerId: user.uid,
+                  ownerEmail: user.email,
+                  timestamp: Date.now()
+                };
+                return database.ref('tasks').push(taskData);
+              })
+              .then(() => {
+                alert("Task created successfully");
+                hideLoading();
+                window.location.href = 'home.html';
+              })
+              .catch(err => {
+                console.error(err);
+                alert("Error creating task: " + err.message);
+                hideLoading();
+              });
+            }
+          }).catch(err => {
+            console.error(err);
+            alert("Error: " + err.message);
+            hideLoading();
+          });
+        } else {
+          hideLoading();
+          window.location.href = "login.html";
+        }
+      });
+    }
+  </script>
+</body>
+</html>

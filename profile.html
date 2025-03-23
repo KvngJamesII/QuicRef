@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QuicReF - Profile</title>
+
+  <!-- Firebase v8 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+  <style>
+    /* Global resets & defaults */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #f9f9f9;
+      color: #333;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding-bottom: 40px;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: auto;
+      padding: 20px;
+      text-align: center;
+    }
+
+    /* Header Avatar */
+    .avatar {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(45deg, #ff0077, #ff7700, #ffd700);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      margin: 0 auto 15px;
+      color: #fff; /* letter color */
+    }
+
+    /* Gradient Text Example */
+    .gradient-text {
+      background: linear-gradient(45deg, #ff0077, #ff7700, #ffd700);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+
+    /* Referral/Other Info Sections */
+    .info-section {
+      text-align: left;
+      margin: 20px auto;
+      max-width: 500px;
+      background: #fff;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .info-section h3 {
+      margin-top: 0;
+      color: #2EBEC6;
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+    .info-section p {
+      margin: 5px 0;
+      font-size: 14px;
+      color: #555;
+    }
+
+    /* Transaction Log */
+    #transactionLog {
+      margin-top: 10px;
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #fff;
+      text-align: left;
+      padding: 10px;
+    }
+    #transactionLog div {
+      border-bottom: 1px solid #ddd;
+      padding: 5px 0;
+      font-size: 14px;
+      color: #666;
+    }
+
+    /* Buttons */
+    .btn {
+      background: #2EBEC6;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      margin: 5px;
+    }
+    .btn:hover {
+      opacity: 0.9;
+    }
+
+    /* Loading Overlay & Spinner */
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.6);
+      z-index: 9999;
+      text-align: center;
+      align-items: center;
+      justify-content: center;
+    }
+    .loading-overlay.active {
+      display: flex;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 6px solid #ccc;
+      border-top: 6px solid #2EBEC6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: auto;
+    }
+    @keyframes spin {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+  </style>
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div>
+      <div class="spinner"></div>
+      <p style="margin-top: 10px; color: #fff;">Loading QuicReF...</p>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Avatar & Basic Info -->
+    <div class="avatar" id="avatarLetter">A</div>
+    <h2 id="userID" class="gradient-text">User ID:</h2>
+    <p id="userEmail" style="font-size: 14px; color: #666;">Email: </p>
+
+    <!-- Referral Info -->
+    <div class="info-section">
+      <h3>Referral</h3>
+      <p>Total Users Invited: <span id="totalInvited">0</span></p>
+      <p>Total Amount Earned: ₦<span id="referralEarned">0</span></p>
+      <p>Your Referral Code: <span id="referralCode"></span></p>
+      <p style="margin-top:10px;">Invite Your Friends And Earn 5% Withdrawable Bonus Anytime They Make A Deposit</p>
+    </div>
+
+    <!-- Transaction Log -->
+    <div class="info-section">
+      <h3>Transaction Log</h3>
+      <div id="transactionLog">
+        <!-- Merged transactions listed here -->
+      </div>
+      <div style="text-align:center; margin-top:10px;">
+        <button class="btn" onclick="prevPage()">Previous</button>
+        <button class="btn" onclick="nextPage()">Next</button>
+      </div>
+    </div>
+
+    <!-- Customer Care -->
+    <div class="info-section">
+      <h3>Customer Care</h3>
+      <p>Need help or have questions? Contact our support team on WhatsApp.</p>
+      <button class="btn" onclick="contactSupport()">Contact Us</button>
+    </div>
+
+    <!-- Logout Button -->
+    <button class="btn" style="margin-top: 20px;" onclick="logoutUser()">Logout</button>
+  </div>
+
+  <script>
+    // ==============================
+    // Firebase Config & Initialization
+    // ==============================
+    const firebaseConfig = {
+      apiKey: "AIzaSyAvbwXNN1yRBSiyDOG9Jru9jodPEgmJfrs",
+      authDomain: "quicref-68806.firebaseapp.com",
+      databaseURL: "https://quicref-68806-default-rtdb.firebaseio.com",
+      projectId: "quicref-68806",
+      storageBucket: "quicref-68806.firebasestorage.app",
+      messagingSenderId: "196781817009",
+      appId: "1:196781817009:web:013596f70ac472d5d13690",
+      measurementId: "G-5VCLEVJ3S9"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    // For transaction pagination
+    let currentPage = 1;
+    const itemsPerPage = 10;
+    let allTransactions = []; // We'll store merged transactions here
+
+    // Show / Hide Loading
+    function showLoading() {
+      document.getElementById("loadingOverlay").classList.add("active");
+    }
+    function hideLoading() {
+      document.getElementById("loadingOverlay").classList.remove("active");
+    }
+
+    // On Auth State Change
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        showLoading();
+        // Display user email & avatar letter
+        document.getElementById('userEmail').innerText = "Email: " + user.email;
+        document.getElementById('avatarLetter').innerText = user.email.charAt(0).toUpperCase();
+        // Load user profile (and then transactions)
+        loadUserProfile(user);
+      } else {
+        window.location.href = 'login.html';
+      }
+    });
+
+    // 1) Load user data
+    function loadUserProfile(user) {
+      database.ref("users/" + user.uid).once("value").then(async snapshot => {
+        let data = snapshot.val() || {};
+
+        // If referralCode doesn't exist, generate new
+        if (!data.referralCode) {
+          let newCode = generateReferralCode();
+          await database.ref("users/" + user.uid).update({ referralCode: newCode });
+          data.referralCode = newCode;
+        }
+
+        // Display referral code as user ID
+        let shortCode = data.referralCode;
+        document.getElementById("userID").innerText = "User ID: " + shortCode;
+        document.getElementById("referralCode").innerText = shortCode;
+
+        // Referral stats
+        let totalInvited = data.referrals ? Object.keys(data.referrals).length : 0;
+        document.getElementById("totalInvited").innerText = totalInvited;
+        document.getElementById("referralEarned").innerText = data.referralBonus || 0;
+
+        // Gather transactions from user’s own data (and optionally other places if needed)
+        await gatherAllUserTransactions(user.uid);
+        hideLoading();
+      }).catch(err => {
+        console.error(err);
+        hideLoading();
+      });
+    }
+
+    function generateReferralCode() {
+      return Math.floor(1000000 + Math.random() * 9000000).toString();
+    }
+
+    // 2) Gather transactions from user’s own data (users/{uid}/transactions)
+    //    This is where the admin panel writes deposit/withdrawal records after approval
+    async function gatherAllUserTransactions(userUid) {
+      allTransactions = [];
+
+      // Read from users/{uid}/transactions
+      let txSnap = await database.ref(`users/${userUid}/transactions`).once("value");
+      if (txSnap.exists()) {
+        txSnap.forEach(child => {
+          let tx = child.val();
+          allTransactions.push({
+            type: tx.type,
+            amount: tx.amount,
+            timestamp: tx.timestamp
+          });
+        });
+      }
+
+      // Sort descending by timestamp
+      allTransactions.sort((a, b) => b.timestamp - a.timestamp);
+
+      // Now display page 1
+      currentPage = 1;
+      displayTransactions();
+    }
+
+    function displayTransactions() {
+      let start = (currentPage - 1) * itemsPerPage;
+      let end = start + itemsPerPage;
+      let pagedLogs = allTransactions.slice(start, end);
+      let container = document.getElementById('transactionLog');
+      container.innerHTML = "";
+
+      if (pagedLogs.length === 0) {
+        container.innerHTML = "<div>No transactions found</div>";
+        return;
+      }
+
+      pagedLogs.forEach(tx => {
+        let div = document.createElement('div');
+        div.innerText = tx.type + " - ₦" + tx.amount + " on " + new Date(tx.timestamp).toLocaleString();
+        container.appendChild(div);
+      });
+    }
+
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        displayTransactions();
+      }
+    }
+
+    function nextPage() {
+      let maxPage = Math.ceil(allTransactions.length / itemsPerPage);
+      if (currentPage < maxPage) {
+        currentPage++;
+        displayTransactions();
+      }
+    }
+
+    // 3) Logout function
+    function logoutUser() {
+      auth.signOut().then(() => {
+        window.location.href = "login.html";
+      });
+    }
+
+    // 4) Customer Care - open WhatsApp
+    function contactSupport() {
+      // Convert 07073260074 => 2347073260074
+      window.open("https://wa.me/2347073260074", "_blank");
+    }
+  </script>
+</body>
+</html>

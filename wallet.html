@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QuicReF - Wallet</title>
+
+  <!-- Firebase SDK (v8) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+  <style>
+    /* Global resets & defaults */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #f9f9f9;
+      color: #333;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding-bottom: 40px; 
+    }
+
+    /* Container */
+    .container {
+      max-width: 600px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .header h2 {
+      margin: 0;
+      font-size: 24px;
+      color: #2EBEC6;
+      font-weight: bold;
+    }
+
+    /* Balance display */
+    .balance-display {
+      text-align: center;
+      margin: 20px 0;
+      font-size: 18px;
+      color: #555;
+    }
+    .balance-display p {
+      margin: 8px 0;
+    }
+
+    /* Buttons (Fund Wallet, Withdraw) */
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .btn {
+      background: #2EBEC6;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 12px 20px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+    .btn:hover {
+      background: #28a8ad;
+    }
+
+    /* Popup overlays */
+    .popup {
+      display: none;
+      position: fixed;
+      top: 20%;
+      left: 10%;
+      right: 10%;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 20px;
+      z-index: 2000;
+      max-width: 400px;
+      margin: auto;
+    }
+    .popup h3 {
+      margin-top: 0;
+      color: #2EBEC6;
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+    .popup .btn-close {
+      background: #ccc;
+      color: #333;
+      margin-top: 10px;
+    }
+
+    /* Deposit/Withdrawal selection buttons */
+    .select-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 10px 0;
+      justify-content: center;
+    }
+    .option-btn {
+      background: #eee;
+      color: #333;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 12px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s, color 0.2s;
+    }
+    .option-btn.selected {
+      background: #2EBEC6;
+      color: #fff;
+      border-color: #2EBEC6;
+    }
+
+    /* Input fields */
+    .input-field {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    /* LOADING OVERLAY & SPINNER */
+    .loading-overlay {
+      display: none; 
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
+      z-index: 9999;
+      text-align: center;
+      align-items: center;
+      justify-content: center;
+    }
+    .loading-overlay.active {
+      display: flex;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 6px solid #ccc;
+      border-top: 6px solid #2EBEC6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: auto;
+    }
+    @keyframes spin {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Close or "X" button in top-right (optional) */
+    .popup-close {
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      font-size: 18px;
+      cursor: pointer;
+      color: #999;
+    }
+  #depositAmount {
+    color: black;
+  }
+  </style>
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div>
+      <div class="spinner"></div>
+      <p style="margin-top: 10px; color: #fff;">Loading QuicReF...</p>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="header">
+      <h2>Wallet</h2>
+    </div>
+    <div class="balance-display">
+      <p>Wallet Balance (Deposit Balance): ₦<span id="depositBalance">0</span></p>
+      <p>Withdrawal Balance: ₦<span id="withdrawableBalance">0</span></p>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="showFundPopup()">Fund Wallet</button>
+      <button class="btn" onclick="showWithdrawPopup()">Withdraw</button>
+    </div>
+  </div>
+
+  <!-- Fund Wallet Popup -->
+  <div id="fundPopup" class="popup">
+    <span class="popup-close" onclick="closeFundPopup()">&times;</span>
+    <h3>Select The Amount You Want To Deposit</h3>
+    <div class="select-grid">
+      <div class="option-btn" onclick="selectDeposit(600)">₦600</div>
+      <div class="option-btn" onclick="selectDeposit(1100)">₦1100</div>
+      <div class="option-btn" onclick="selectDeposit(1600)">₦1600</div>
+      <div class="option-btn" onclick="selectDeposit(2100)">₦2100</div>
+      <div class="option-btn" onclick="selectDeposit(3100)">₦3100</div>
+      <div class="option-btn" onclick="selectDeposit(5100)">₦5100</div>
+    </div>
+    <button class="btn" onclick="closeFundPopup()">Close</button>
+  </div>
+
+  <!-- Payment Instructions Popup -->
+  <div id="paymentPopup" class="popup">
+    <span class="popup-close" onclick="closePaymentPopup()">&times;</span>
+    <h3>Make a payment of ₦<span id="depositAmount"></span></h3>
+    <p>into the bank below 👇</p><br>
+    <p><strong>✅1006897571</strong></p><br>
+    <p><strong>🏦LOTUS BANK</strong></p><br>
+    <p><strong>👤ADEDAYO</strong></p><br>
+    <p>Kindly note, a service fee of <strong>₦100</strong> will be deducted</p><br>
+    <button class="btn" onclick="confirmPayment()">I've made payment</button>
+  </div>
+
+  <!-- Payment Verification Popup -->
+  <div id="verifyPopup" class="popup">
+    <span class="popup-close" onclick="closeVerifyPopup()">&times;</span>
+    <h3>Verify Payment</h3>
+    <input type="text" id="paymentProof" class="input-field" placeholder="Enter name used or upload receipt">
+    <button class="btn" onclick="verifyPayment()">✅ DONE</button>
+  </div>
+
+  <!-- Withdraw Popup -->
+  <div id="withdrawPopup" class="popup">
+    <span class="popup-close" onclick="closeWithdrawPopup()">&times;</span>
+    <h3>Select Withdrawal Amount</h3>
+    <div class="select-grid">
+      <div class="option-btn" onclick="selectWithdrawal(100)">₦100</div>
+      <div class="option-btn" onclick="selectWithdrawal(200)">₦200</div>
+      <div class="option-btn" onclick="selectWithdrawal(500)">₦500</div>
+      <div class="option-btn" onclick="selectWithdrawal(1000)">₦1000</div>
+      <div class="option-btn" onclick="selectWithdrawal(1500)">₦1500</div>
+      <div class="option-btn" onclick="selectWithdrawal(2000)">₦2000</div>
+    </div>
+    <h3>Select Network</h3>
+    <select id="network" class="input-field">
+      <option value="Airtel">Airtel</option>
+      <option value="MTN">MTN</option>
+      <option value="Glo">Glo</option>
+      <option value="9mobile">9mobile</option>
+    </select>
+    <input type="text" id="phone" class="input-field" placeholder="Enter 11-digit phone number">
+    <button class="btn" onclick="submitWithdrawal()">Submit Withdrawal</button>
+    <button class="btn btn-close" onclick="closeWithdrawPopup()">Close</button>
+  </div>
+
+  <script>
+    // ========== Firebase Config ==========
+    const firebaseConfig = {
+      apiKey: "AIzaSyAvbwXNN1yRBSiyDOG9Jru9jodPEgmJfrs",
+      authDomain: "quicref-68806.firebaseapp.com",
+      databaseURL: "https://quicref-68806-default-rtdb.firebaseio.com",
+      projectId: "quicref-68806",
+      storageBucket: "quicref-68806.firebasestorage.app",
+      messagingSenderId: "196781817009",
+      appId: "1:196781817009:web:013596f70ac472d5d13690",
+      measurementId: "G-5VCLEVJ3S9"
+    };
+    const app = firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    let selectedDeposit = 0;
+    let selectedWithdrawal = 0;
+
+    // Show / Hide Loading
+    function showLoading() {
+      document.getElementById("loadingOverlay").classList.add("active");
+    }
+    function hideLoading() {
+      document.getElementById("loadingOverlay").classList.remove("active");
+    }
+
+    // On page load, watch for user changes
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        showLoading();
+        database.ref('users/' + user.uid).on('value', snapshot => {
+          if (!snapshot.exists()) {
+            hideLoading();
+            return;
+          }
+          let data = snapshot.val();
+          document.getElementById('depositBalance').innerText = data.depositBalance || 0;
+          document.getElementById('withdrawableBalance').innerText = data.withdrawableBalance || 0;
+          hideLoading();
+        });
+      } else {
+        // Not logged in, redirect if needed
+        window.location.href = "login.html";
+      }
+    });
+
+    /* =====================
+       POPUP Show / Hide
+       ===================== */
+    function showFundPopup() {
+      document.getElementById('fundPopup').style.display = 'block';
+    }
+    function closeFundPopup() {
+      document.getElementById('fundPopup').style.display = 'none';
+    }
+    function closePaymentPopup() {
+      document.getElementById('paymentPopup').style.display = 'none';
+    }
+    function closeVerifyPopup() {
+      document.getElementById('verifyPopup').style.display = 'none';
+    }
+    function showWithdrawPopup() {
+      document.getElementById('withdrawPopup').style.display = 'block';
+    }
+    function closeWithdrawPopup() {
+      document.getElementById('withdrawPopup').style.display = 'none';
+    }
+
+    /* =====================
+       DEPOSIT Functions
+       ===================== */
+    function selectDeposit(amount) {
+      selectedDeposit = amount;
+      highlightSelection('fundPopup', amount);
+    }
+    function confirmPayment() {
+      document.getElementById('paymentPopup').style.display = 'none';
+      document.getElementById('verifyPopup').style.display = 'block';
+    }
+    function verifyPayment() {
+      const proof = document.getElementById('paymentProof').value;
+      if (!proof) {
+        alert("Please provide payment proof");
+        return;
+      }
+      showLoading();
+      auth.onAuthStateChanged(user => {
+        if (user) {
+          // Fetch referral code from user data
+          database.ref('users/' + user.uid).once('value').then(snapshot => {
+            if (!snapshot.exists()) {
+              alert("User not found");
+              hideLoading();
+              return;
+            }
+            const userData = snapshot.val();
+            const shortCode = userData.referralCode || user.uid;
+
+            const depositData = {
+              userId: shortCode,
+              email: user.email,
+              amount: selectedDeposit,
+              proof: proof,
+              timestamp: Date.now()
+            };
+            database.ref('deposits').push(depositData);
+            alert("We're Verifying Your Payment");
+            document.getElementById('verifyPopup').style.display = 'none';
+            hideLoading();
+          });
+        }
+      });
+    }
+
+    // After user picks deposit amount, we show paymentPopup
+    document.getElementById('fundPopup').addEventListener('click', (e) => {
+      if (e.target.classList.contains('option-btn')) {
+        document.getElementById('depositAmount').innerText = selectedDeposit;
+        document.getElementById('fundPopup').style.display = 'none';
+        document.getElementById('paymentPopup').style.display = 'block';
+      }
+    });
+
+    /* =====================
+       WITHDRAW Functions
+       ===================== */
+    function selectWithdrawal(amount) {
+      selectedWithdrawal = amount;
+      highlightSelection('withdrawPopup', amount);
+    }
+    function submitWithdrawal() {
+      const network = document.getElementById('network').value;
+      const phone = document.getElementById('phone').value;
+      if (phone.length !== 11) {
+        alert("Phone number must be 11 digits");
+        return;
+      }
+      showLoading();
+      auth.onAuthStateChanged(user => {
+        if (user) {
+          database.ref('users/' + user.uid).once('value').then(snapshot => {
+            if (!snapshot.exists()) {
+              alert("User not found");
+              hideLoading();
+              return;
+            }
+            let data = snapshot.val();
+            if ((data.withdrawableBalance || 0) < selectedWithdrawal) {
+              alert("Insufficient withdrawal balance");
+              hideLoading();
+            } else {
+              let newBalance = data.withdrawableBalance - selectedWithdrawal;
+              database.ref('users/' + user.uid).update({ withdrawableBalance: newBalance });
+
+              const shortCode = data.referralCode || user.uid;
+              const withdrawalData = {
+                userId: shortCode,
+                amount: selectedWithdrawal,
+                network: network,
+                phone: phone,
+                timestamp: Date.now()
+              };
+              database.ref('withdrawals').push(withdrawalData);
+              alert("Your Withdrawal Is Processing");
+              document.getElementById('withdrawPopup').style.display = 'none';
+              hideLoading();
+            }
+          });
+        }
+      });
+    }
+
+    /* =====================
+       Highlight selection
+       ===================== */
+    function highlightSelection(popupId, amount) {
+      // Within the specified popup, find all .option-btn
+      const popup = document.getElementById(popupId);
+      const buttons = popup.querySelectorAll('.option-btn');
+      buttons.forEach(btn => {
+        // remove existing "selected" class
+        btn.classList.remove('selected');
+
+        // parse numeric value from button text (e.g. "₦1000" -> 1000)
+        const btnAmount = parseInt(btn.textContent.replace(/\D/g, ''), 10);
+
+        // if the parsed amount equals the chosen amount, highlight
+        if (btnAmount === amount) {
+          btn.classList.add('selected');
+        }
+      });
+    }
+  </script>
+</body>
+</html>

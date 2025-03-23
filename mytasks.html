@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QuicReF - My Tasks</title>
+
+  <!-- Firebase (v8) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+  <style>
+    /* Global resets & defaults */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #f9f9f9;
+      color: #333;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding-bottom: 40px;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    /* Page Title */
+    h1 {
+      text-align: center;
+      color: #2EBEC6;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+
+    /* Gradient text (optional) */
+    .gradient-text {
+      background: linear-gradient(45deg, #ff0077, #ff7700, #ffd700);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* Task Cards */
+    .task-card {
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 20px;
+      background: #fff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .task-card h3 {
+      margin-top: 0;
+      color: #2EBEC6;
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    .task-card p {
+      margin: 4px 0;
+      font-size: 14px;
+      color: #555;
+    }
+
+    /* Submissions Container */
+    .submissions-container {
+      margin-top: 10px;
+      border-top: 1px solid #444;
+      padding-top: 10px;
+    }
+
+    /* Submission Card */
+    .submission-card {
+      border: 1px solid #444;
+      padding: 8px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      background: #fafafa;
+    }
+    .submission-card p {
+      margin: 3px 0;
+      font-size: 13px;
+      color: #666;
+    }
+
+    /* Buttons */
+    .btn {
+      background: #2EBEC6;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 6px;
+      margin-top: 5px;
+    }
+    .btn:hover {
+      opacity: 0.9;
+    }
+
+    /* Loading Overlay & Spinner */
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
+      z-index: 9999;
+      text-align: center;
+      align-items: center;
+      justify-content: center;
+    }
+    .loading-overlay.active {
+      display: flex;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 6px solid #ccc;
+      border-top: 6px solid #2EBEC6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: auto;
+    }
+    @keyframes spin {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+  </style>
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div>
+      <div class="spinner"></div>
+      <p style="margin-top: 10px; color: #fff;">Loading QuicReF...</p>
+    </div>
+  </div>
+
+  <div class="container">
+    <h1>My Tasks</h1>
+    <div id="myTasksContainer">
+      <!-- We'll display the owner's tasks and submissions here -->
+    </div>
+  </div>
+
+  <script>
+    // =========================
+    // 1. Initialize Firebase
+    // =========================
+    var firebaseConfig = {
+      apiKey: "AIzaSyAvbwXNN1yRBSiyDOG9Jru9jodPEgmJfrs",
+      authDomain: "quicref-68806.firebaseapp.com",
+      databaseURL: "https://quicref-68806-default-rtdb.firebaseio.com",
+      projectId: "quicref-68806",
+      storageBucket: "quicref-68806.firebasestorage.app",
+      messagingSenderId: "196781817009",
+      appId: "1:196781817009:web:013596f70ac472d5d13690",
+      measurementId: "G-5VCLEVJ3S9"
+    };
+    firebase.initializeApp(firebaseConfig);
+    var auth = firebase.auth();
+    var database = firebase.database();
+
+    // Show/Hide Loading
+    function showLoading() {
+      document.getElementById("loadingOverlay").classList.add("active");
+    }
+    function hideLoading() {
+      document.getElementById("loadingOverlay").classList.remove("active");
+    }
+
+    // =========================
+    // 2. On Auth, Load Owner's Tasks
+    // =========================
+    auth.onAuthStateChanged(function(user) {
+      if (user) {
+        showLoading();
+        loadMyTasks(user);
+      } else {
+        alert("Please log in first.");
+        window.location.href = "login.html";
+      }
+    });
+
+    // =========================
+    // 3. Load tasks where ownerId == user.uid
+    // =========================
+    function loadMyTasks(user) {
+      database.ref("tasks")
+        .orderByChild("ownerId")
+        .equalTo(user.uid)
+        .on("value", function(snapshot) {
+          var tasks = snapshot.val();
+          var container = document.getElementById("myTasksContainer");
+          container.innerHTML = "";
+
+          if (!tasks) {
+            container.innerHTML = "<p>You have not created any tasks yet.</p>";
+            hideLoading();
+            return;
+          }
+
+          // Convert tasks object to array
+          var taskKeys = Object.keys(tasks).reverse(); // newest first
+          taskKeys.forEach(function(taskId) {
+            var task = tasks[taskId];
+
+            // Create a card for each task
+            var taskCard = document.createElement("div");
+            taskCard.className = "task-card";
+
+            taskCard.innerHTML = `
+              <h3>${task.name}</h3>
+              <p>Slots: ${task.slotsLeft} / ${task.totalSlots}</p>
+              <p>Price per user: ₦${task.price}</p>
+              <div id="submissions-${taskId}" class="submissions-container">
+                <p>Loading submissions...</p>
+              </div>
+            `;
+            container.appendChild(taskCard);
+
+            // Load submissions for this task
+            loadSubmissionsForTask(taskId, task);
+          });
+          hideLoading();
+        });
+    }
+
+    // =========================
+    // 4. Load submissions for a given task
+    // =========================
+    function loadSubmissionsForTask(taskId, taskData) {
+      var subsContainer = document.getElementById("submissions-" + taskId);
+
+      database.ref("submissions/" + taskId).on("value", function(snapshot) {
+        var subs = snapshot.val();
+        subsContainer.innerHTML = "";
+
+        if (!subs) {
+          subsContainer.innerHTML = "<p>No submissions yet.</p>";
+          return;
+        }
+
+        // Convert to array
+        var subKeys = Object.keys(subs).reverse();
+        subKeys.forEach(function(subId) {
+          var submission = subs[subId];
+          // Create a submission card
+          var subDiv = document.createElement("div");
+          subDiv.className = "submission-card";
+
+          subDiv.innerHTML = `
+            <p>User ID: ${submission.userId}</p>
+            <p>Text Proof: ${submission.textProof || "N/A"}</p>
+            <p>Image Proof: ${submission.imageProof || "N/A"}</p>
+            <button class="btn" onclick="approveSubmission('${taskId}','${subId}','${submission.userId}',${taskData.price})">Approve</button>
+            <button class="btn" onclick="rejectSubmission('${taskId}','${subId}')">Reject</button>
+          `;
+          subsContainer.appendChild(subDiv);
+        });
+      });
+    }
+
+    // =========================
+    // 5. Approve Submission
+    // =========================
+    function approveSubmission(taskId, subId, referralCode, price) {
+      if (!confirm("Approve this submission?")) return;
+
+      // 1. Find the user by referralCode
+      database.ref("users")
+        .orderByChild("referralCode")
+        .equalTo(referralCode)
+        .once("value")
+        .then(function(snapshot) {
+          if (!snapshot.exists()) {
+            alert("User not found by referral code: " + referralCode);
+            return;
+          }
+          snapshot.forEach(function(child) {
+            var userKey = child.key;
+            var userData = child.val();
+            var currentBalance = parseFloat(userData.withdrawableBalance || 0);
+
+            // 2. Credit them the price
+            var newBalance = currentBalance + price;
+            database.ref("users/" + userKey).update({ withdrawableBalance: newBalance });
+
+            // 3. Remove the submission
+            database.ref("submissions/" + taskId + "/" + subId).remove();
+
+            // 4. Decrement the task's slotsLeft
+            database.ref("tasks/" + taskId).once("value").then(function(taskSnap) {
+              if (!taskSnap.exists()) return;
+              var task = taskSnap.val();
+              var newSlotsLeft = task.slotsLeft - 1;
+              if (newSlotsLeft <= 0) {
+                // If it's fully completed, you can remove the task or mark it done
+                database.ref("tasks/" + taskId).update({ slotsLeft: 0 });
+              } else {
+                database.ref("tasks/" + taskId).update({ slotsLeft: newSlotsLeft });
+              }
+            });
+            alert("Submission approved. User credited ₦" + price);
+          });
+        })
+        .catch(function(err) {
+          alert("Error: " + err.message);
+        });
+    }
+
+    // =========================
+    // 6. Reject Submission
+    // =========================
+    function rejectSubmission(taskId, subId) {
+      if (!confirm("Reject this submission?")) return;
+
+      database.ref("submissions/" + taskId + "/" + subId).remove()
+      .then(function() {
+        alert("Submission rejected and removed.");
+      })
+      .catch(function(err) {
+        alert("Error: " + err.message);
+      });
+    }
+  </script>
+</body>
+</html>

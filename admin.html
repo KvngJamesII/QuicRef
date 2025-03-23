@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QuicReF - Admin Panel</title>
+
+  <!-- Firebase (v8) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+  <style>
+    /* Global resets & defaults */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #f9f9f9;
+      color: #333;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding-bottom: 40px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    h2 {
+      text-align: center;
+      font-size: 24px;
+      color: #2EBEC6;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+    h3 {
+      font-size: 18px;
+      color: #2EBEC6;
+      margin: 20px 0 10px;
+    }
+
+    /* Sections */
+    .section {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 15px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    /* Inputs & Buttons */
+    .input-field {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 8px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+    .btn {
+      background: #2EBEC6;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 5px;
+      margin-top: 5px;
+    }
+    .btn:hover {
+      opacity: 0.9;
+    }
+
+    /* Deposit/Withdrawal Items */
+    .item-card {
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    .item-card p {
+      margin: 4px 0;
+      font-size: 14px;
+      color: #555;
+    }
+
+    /* Table for All Users */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    table thead {
+      background: #2EBEC6;
+      color: #fff;
+    }
+    table th, table td {
+      padding: 8px;
+      border: 1px solid #ddd;
+      font-size: 14px;
+      text-align: center;
+    }
+
+    /* Loading Overlay & Spinner */
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
+      z-index: 9999;
+      text-align: center;
+      align-items: center;
+      justify-content: center;
+    }
+    .loading-overlay.active {
+      display: flex;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 6px solid #ccc;
+      border-top: 6px solid #2EBEC6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: auto;
+    }
+    @keyframes spin {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div>
+      <div class="spinner"></div>
+      <p style="margin-top: 10px; color: #fff;">Loading QuicReF Admin...</p>
+    </div>
+  </div>
+
+  <div class="container">
+    <h2>Admin Panel</h2>
+
+    <!-- Admin Login Section -->
+    <div id="adminLogin" class="section">
+      <input type="email" id="adminEmail" class="input-field" placeholder="Admin Email" />
+      <input type="password" id="adminPassword" class="input-field" placeholder="Password" />
+      <button class="btn" onclick="adminLogin()">Login as Admin</button>
+    </div>
+
+    <!-- Admin Panel Section (Hidden by default) -->
+    <div id="adminPanel" style="display:none;">
+
+      <!-- Site Stats -->
+      <div class="section">
+        <h3>Site Stats</h3>
+        <p>Total Users: <span id="totalUsers">0</span></p>
+        <p>Total Tasks: <span id="totalTasks">0</span></p>
+        <p>Total Deposits: <span id="totalDeposits">0</span></p>
+        <p>Total Withdrawals: <span id="totalWithdrawals">0</span></p>
+        <button class="btn" onclick="loadSiteStats()">Refresh Stats</button>
+      </div>
+
+      <!-- Pending Deposits -->
+      <div class="section">
+        <h3>Pending Deposits</h3>
+        <div id="pendingDeposits"></div>
+      </div>
+
+      <!-- Pending Withdrawals -->
+      <div class="section">
+        <h3>Pending Withdrawals</h3>
+        <div id="pendingWithdrawals"></div>
+      </div>
+
+      <!-- User Management -->
+      <div class="section">
+        <h3>User Management</h3>
+        <input type="text" id="searchUser" class="input-field" placeholder="Enter User ID (7-digit)" />
+        <button class="btn" onclick="findUser()">Find User</button>
+        <div id="userInfo" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- All Users Table -->
+      <div class="section">
+        <h3>All Users</h3>
+        <button class="btn" onclick="loadAllUsers()">Load All Users</button>
+        <div id="allUsersTable" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- Announcement Section -->
+      <div class="section">
+        <h3>Announcement</h3>
+        <textarea id="announcementText" class="input-field" placeholder="Type your announcement here..."></textarea>
+        <button class="btn" onclick="publishAnnouncement()">Publish Announcement</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =====================
+    // Firebase Config
+    // =====================
+    const firebaseConfig = {
+      apiKey: "AIzaSyAvbwXNN1yRBSiyDOG9Jru9jodPEgmJfrs",
+      authDomain: "quicref-68806.firebaseapp.com",
+      databaseURL: "https://quicref-68806-default-rtdb.firebaseio.com",
+      projectId: "quicref-68806",
+      storageBucket: "quicref-68806.firebasestorage.app",
+      messagingSenderId: "196781817009",
+      appId: "1:196781817009:web:013596f70ac472d5d13690",
+      measurementId: "G-5VCLEVJ3S9"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    // Show / Hide Loading Overlay
+    function showLoading() {
+      document.getElementById("loadingOverlay").classList.add("active");
+    }
+    function hideLoading() {
+      document.getElementById("loadingOverlay").classList.remove("active");
+    }
+
+    // Admin Login
+    function adminLogin() {
+      const email = document.getElementById('adminEmail').value.trim();
+      const password = document.getElementById('adminPassword').value.trim();
+      if (email === "adedayomichael333@gmail.com" && password === "isr828") {
+        document.getElementById('adminLogin').style.display = 'none';
+        document.getElementById('adminPanel').style.display = 'block';
+        // Load data
+        loadSiteStats();
+        loadPendingDeposits();
+        loadPendingWithdrawals();
+      } else {
+        alert("Invalid admin credentials");
+      }
+    }
+
+    // =====================
+    // Site Stats
+    // =====================
+    function loadSiteStats() {
+      showLoading();
+      // Total Users
+      database.ref("users").once("value").then(snapshot => {
+        let totalUsers = snapshot.numChildren();
+        document.getElementById("totalUsers").innerText = totalUsers;
+      });
+      // Total Tasks
+      database.ref("tasks").once("value").then(snapshot => {
+        let totalTasks = snapshot.exists() ? snapshot.numChildren() : 0;
+        document.getElementById("totalTasks").innerText = totalTasks;
+      });
+      // Total Deposits
+      database.ref("deposits").once("value").then(snapshot => {
+        let totalDeposits = snapshot.exists() ? snapshot.numChildren() : 0;
+        document.getElementById("totalDeposits").innerText = totalDeposits;
+      });
+      // Total Withdrawals
+      database.ref("withdrawals").once("value").then(snapshot => {
+        let totalWithdrawals = snapshot.exists() ? snapshot.numChildren() : 0;
+        document.getElementById("totalWithdrawals").innerText = totalWithdrawals;
+      }).finally(() => {
+        hideLoading();
+      });
+    }
+
+    // =====================
+    // Pending Deposits
+    // =====================
+    function loadPendingDeposits() {
+      showLoading();
+      database.ref('deposits').on('value', snapshot => {
+        hideLoading();
+        const deposits = snapshot.val();
+        const container = document.getElementById('pendingDeposits');
+        container.innerHTML = "";
+        if (!deposits) {
+          container.innerHTML = "<p>No pending deposits</p>";
+          return;
+        }
+        for (let key in deposits) {
+          let deposit = deposits[key];
+          let div = document.createElement('div');
+          div.className = "item-card";
+          div.innerHTML = `
+            <p>User ID: ${deposit.userId}</p>
+            <p>Amount: ₦${deposit.amount}</p>
+            <p>Proof: ${deposit.proof}</p>
+            <button class="btn" onclick="approveDeposit('${key}', '${deposit.userId}', ${deposit.amount})">Approve</button>
+            <button class="btn" onclick="rejectDeposit('${key}')">Reject</button>
+          `;
+          container.appendChild(div);
+        }
+      }, err => {
+        hideLoading();
+        console.error(err);
+      });
+    }
+
+    // ======= Approve Deposit & Record Transaction =======
+    function approveDeposit(depositKey, referralCode, amount) {
+      if (!confirm("Approve this deposit?")) return;
+      showLoading();
+      // 1) Find depositing user by referralCode
+      database.ref("users")
+        .orderByChild("referralCode")
+        .equalTo(referralCode)
+        .once("value")
+      .then(snapshot => {
+        if (!snapshot.exists()) {
+          alert("User not found!");
+          hideLoading();
+          return;
+        }
+        snapshot.forEach(childSnapshot => {
+          let userKey = childSnapshot.key;
+          let userData = childSnapshot.val();
+          // 2) Increase user's depositBalance by (amount - 100)
+          let newBalance = parseFloat(userData.depositBalance || 0) + (amount - 100);
+
+          database.ref("users/" + userKey).update({ depositBalance: newBalance })
+          .then(() => {
+            // 3) Remove deposit from pending
+            database.ref("deposits/" + depositKey).remove();
+
+            // 4) If user was referred, credit referrer with ₦25
+            if (userData.referredBy) {
+              creditReferrer(userData.referredBy);
+            }
+
+            alert("Deposit Approved!");
+            hideLoading();
+          });
+        });
+      })
+      .catch(err => {
+        console.error(err);
+        hideLoading();
+      });
+    }
+
+    function creditReferrer(referrerUid) {
+      database.ref("users/" + referrerUid).once("value").then(snapshot => {
+        if (!snapshot.exists()) return;
+        let refData = snapshot.val() || {};
+        let oldWb = parseFloat(refData.withdrawableBalance || 0);
+        let newWb = oldWb + 25;
+        database.ref("users/" + referrerUid).update({ withdrawableBalance: newWb })
+        .then(() => {
+          console.log("Referrer credited ₦25 bonus!");
+        })
+        .catch(err => console.error("Error crediting referrer:", err));
+      });
+    }
+
+    function rejectDeposit(key) {
+      if (!confirm("Reject this deposit?")) return;
+      showLoading();
+      database.ref('deposits/' + key).remove().then(() => {
+        alert("Deposit Rejected");
+        hideLoading();
+      }).catch(err => {
+        console.error(err);
+        hideLoading();
+      });
+    }
+
+    // =====================
+    // Pending Withdrawals
+    // =====================
+    function loadPendingWithdrawals() {
+      showLoading();
+      database.ref('withdrawals').on('value', snapshot => {
+        hideLoading();
+        const withdrawals = snapshot.val();
+        const container = document.getElementById('pendingWithdrawals');
+        container.innerHTML = "";
+        if (!withdrawals) {
+          container.innerHTML = "<p>No pending withdrawals</p>";
+          return;
+        }
+        for (let key in withdrawals) {
+          let wd = withdrawals[key];
+          let div = document.createElement('div');
+          div.className = "item-card";
+          div.innerHTML = `
+            <p>User ID: ${wd.userId}</p>
+            <p>Amount: ₦${wd.amount}</p>
+            <p>Network: ${wd.network}</p>
+            <p>Phone: ${wd.phone}</p>
+            <button class="btn" onclick="completeWithdrawal('${key}')">Done</button>
+          `;
+          container.appendChild(div);
+        }
+      }, err => {
+        hideLoading();
+        console.error(err);
+      });
+    }
+
+    function completeWithdrawal(key) {
+      if (!confirm("Mark withdrawal as completed?")) return;
+      showLoading();
+      database.ref('withdrawals/' + key).remove().then(() => {
+        alert("Withdrawal Completed");
+        hideLoading();
+      }).catch(err => {
+        console.error(err);
+        hideLoading();
+      });
+    }
+
+    // =====================
+    // User Management
+    // =====================
+    function findUser() {
+      showLoading();
+      const userCode = document.getElementById('searchUser').value.trim();
+      database.ref("users").orderByChild("referralCode").equalTo(userCode).once("value")
+      .then(snapshot => {
+        hideLoading();
+        let infoDiv = document.getElementById("userInfo");
+        infoDiv.innerHTML = "";
+        if (snapshot.exists()) {
+          snapshot.forEach(childSnapshot => {
+            const user = childSnapshot.val();
+            let userKey = childSnapshot.key;
+            let bannedStatus = user.banned ? "Yes" : "No";
+            infoDiv.innerHTML = `
+              <p><b>User ID:</b> ${user.referralCode}</p>
+              <p><b>Email:</b> ${user.email}</p>
+              <p><b>Deposit Balance:</b> ₦${user.depositBalance || 0}</p>
+              <p><b>Withdrawable Balance:</b> ₦${user.withdrawableBalance || 0}</p>
+              <p><b>Banned:</b> ${bannedStatus}</p>
+              <div style="margin-top:10px;">
+                <button class="btn" onclick="banUser('${userKey}')">Ban</button>
+                <button class="btn" onclick="unbanUser('${userKey}')">Unban</button>
+                <button class="btn" onclick="adjustBalancePrompt('${userKey}')">Adjust Balance</button>
+              </div>
+            `;
+          });
+        } else {
+          infoDiv.innerHTML = "<p>User not found</p>";
+        }
+      })
+      .catch(err => {
+        hideLoading();
+        console.error(err);
+      });
+    }
+
+    function banUser(userKey) {
+      if (!confirm("Ban this user?")) return;
+      showLoading();
+      database.ref("users/" + userKey).update({ banned: true }).then(() => {
+        alert("User banned");
+        hideLoading();
+      }).catch(err => {
+        console.error(err);
+        hideLoading();
+      });
+    }
+
+    function unbanUser(userKey) {
+      if (!confirm("Unban this user?")) return;
+      showLoading();
+      database.ref("users/" + userKey).update({ banned: false }).then(() => {
+        alert("User unbanned");
+        hideLoading();
+      }).catch(err => {
+        console.error(err);
+        hideLoading();
+      });
+    }
+
+    function adjustBalancePrompt(userKey) {
+      let type = prompt("Which balance to adjust? (deposit or withdrawable)").toLowerCase();
+      if (type !== "deposit" && type !== "withdrawable") {
+        alert("Invalid balance type");
+        return;
+      }
+      let amount = parseFloat(prompt("Enter the amount to add or subtract (e.g. +500 or -200)"));
+      if (isNaN(amount) || amount === 0) {
+        alert("Invalid amount");
+        return;
+      }
+      adjustBalance(userKey, type, amount);
+    }
+
+    function adjustBalance(userKey, type, amount) {
+      showLoading();
+      database.ref("users/" + userKey).once("value").then(snapshot => {
+        if (!snapshot.exists()) {
+          alert("User not found");
+          hideLoading();
+          return;
+        }
+        let userData = snapshot.val();
+        let field = (type === "deposit") ? "depositBalance" : "withdrawableBalance";
+        let oldVal = parseFloat(userData[field] || 0);
+        let newVal = oldVal + amount;
+        if (newVal < 0) newVal = 0; // don't allow negative
+        let updateObj = {};
+        updateObj[field] = newVal;
+        database.ref("users/" + userKey).update(updateObj).then(() => {
+          alert("Balance updated successfully");
+          hideLoading();
+        });
+      }).catch(err => {
+        console.error(err);
+        hideLoading();
+      });
+    }
+
+    // =====================
+    // View All Users
+    // =====================
+    function loadAllUsers() {
+      showLoading();
+      database.ref("users").once("value").then(async snapshot => {
+        let data = snapshot.val() || {};
+        // Convert to array: [[uid, userObj], ...]
+        let arr = Object.entries(data);
+
+        // Just reverse to show "newest" by key
+        arr.reverse();
+
+        // Build table
+        let tableHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>S/N</th>
+                <th>User ID</th>
+                <th>User Email</th>
+                <th>Deposits</th>
+                <th>Referrals</th>
+                <th>Withdrawals</th>
+                <th>Tasks Created</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        
+        let index = 0;
+        for (let [uid, userObj] of arr) {
+          index++;
+          let referralCode = userObj.referralCode || "N/A";
+          let email = userObj.email || "N/A";
+          let referralCount = userObj.referrals ? Object.keys(userObj.referrals).length : 0;
+
+          let depositCount = await countDeposits(referralCode);
+          let withdrawalCount = await countWithdrawals(referralCode);
+          let tasksCount = await countTasks(uid);
+
+          tableHTML += `
+            <tr>
+              <td>${index}</td>
+              <td>${referralCode}</td>
+              <td>${email}</td>
+              <td>${depositCount}</td>
+              <td>${referralCount}</td>
+              <td>${withdrawalCount}</td>
+              <td>${tasksCount}</td>
+            </tr>
+          `;
+        }
+
+        tableHTML += "</tbody></table>";
+
+        document.getElementById("allUsersTable").innerHTML = tableHTML;
+        hideLoading();
+      }).catch(err => {
+        console.error(err);
+        hideLoading();
+      });
+    }
+
+    function countDeposits(referralCode) {
+      return database.ref("deposits")
+        .orderByChild("userId")
+        .equalTo(referralCode)
+        .once("value")
+        .then(snap => {
+          if (!snap.exists()) return 0;
+          return snap.numChildren();
+        });
+    }
+    function countWithdrawals(referralCode) {
+      return database.ref("withdrawals")
+        .orderByChild("userId")
+        .equalTo(referralCode)
+        .once("value")
+        .then(snap => {
+          if (!snap.exists()) return 0;
+          return snap.numChildren();
+        });
+    }
+    function countTasks(uid) {
+      return database.ref("tasks")
+        .orderByChild("ownerId")
+        .equalTo(uid)
+        .once("value")
+        .then(snap => {
+          if (!snap.exists()) return 0;
+          return snap.numChildren();
+        });
+    }
+
+    // =====================
+    // Publish Announcement
+    // =====================
+    function publishAnnouncement() {
+      const text = document.getElementById("announcementText").value.trim();
+      if (!text) {
+        alert("Please type an announcement.");
+        return;
+      }
+      showLoading();
+      // We'll store a single global announcement, or you can push multiple
+      database.ref("announcement").set({
+        text: text,
+        timestamp: Date.now()
+      }).then(() => {
+        hideLoading();
+        alert("Announcement published!");
+        // Clear the text area
+        document.getElementById("announcementText").value = "";
+      }).catch(err => {
+        hideLoading();
+        alert("Error: " + err.message);
+      });
+    }
+  </script>
+</body>
+</html>
